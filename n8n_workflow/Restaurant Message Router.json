@@ -1,0 +1,168 @@
+{
+  "name": "Restaurant Message Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/restaurant/{{$parameter.restaurantId}}",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-receiver",
+      "name": "Webhook Receiver",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.channel }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "facebook",
+              "output": 0
+            },
+            {
+              "value2": "instagram", 
+              "output": 1
+            },
+            {
+              "value2": "sms",
+              "output": 2
+            },
+            {
+              "value2": "website",
+              "output": 3
+            }
+          ]
+        }
+      },
+      "id": "channel-router",
+      "name": "Channel Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://langchain-service:8000/process",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"message\": $json.message,\n  \"context\": {\n    \"restaurantId\": $json.restaurantId,\n    \"channel\": $json.channel,\n    \"customerId\": $json.customerId,\n    \"conversationHistory\": $json.history || []\n  }\n} }}",
+        "options": {}
+      },
+      "id": "langchain-processor",
+      "name": "LangChain Processor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "conversations",
+        "columns": "restaurant_id,customer_id,channel,message,response,timestamp",
+        "additionalFields": {
+          "mode": "values"
+        },
+        "values": "={{ $json.restaurantId }},{{ $json.customerId }},{{ $json.channel }},{{ JSON.stringify($json.message) }},{{ JSON.stringify($('LangChain Processor').item.json.response) }},{{ $now }}"
+      },
+      "id": "log-conversation",
+      "name": "Log Conversation", 
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": true,\n  \"response\": $('LangChain Processor').item.json.response,\n  \"conversationId\": $('Log Conversation').item.json.id\n} }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Receiver": {
+      "main": [
+        [
+          {
+            "node": "Channel Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Channel Router": {
+      "main": [
+        [
+          {
+            "node": "LangChain Processor",
+            "type": "main", 
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LangChain Processor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LangChain Processor", 
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LangChain Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LangChain Processor": {
+      "main": [
+        [
+          {
+            "node": "Log Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Conversation": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

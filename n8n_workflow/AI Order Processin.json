@@ -1,0 +1,236 @@
+{
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "name": "AI Order Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "order/process",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Order Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process the incoming order\nconst items = $input.all();\nconst order = items[0].json;\n\n// Validate and process menu items\nconst validatedItems = [];\nlet totalPrice = 0;\n\nfor (const item of order.items || []) {\n  try {\n    // Fetch menu item details\n    const menuResponse = await $http.request({\n      method: 'GET',\n      url: `http://menu-service/item/${item.id}`,\n      headers: {\n        'Content-Type': 'application/json'\n      }\n    });\n    \n    const menuItem = menuResponse.data || menuResponse;\n    \n    if (menuItem && menuItem.price) {\n      const lineTotal = menuItem.price * (item.quantity || 1);\n      \n      validatedItems.push({\n        id: menuItem.id,\n        name: menuItem.name,\n        price: menuItem.price,\n        quantity: item.quantity || 1,\n        modifications: item.modifications || [],\n        prepTime: menuItem.prepTime || 15,\n        lineTotal: lineTotal\n      });\n      \n      totalPrice += lineTotal;\n    }\n  } catch (error) {\n    console.log(`Error fetching item ${item.id}:`, error.message);\n    // Continue processing other items\n  }\n}\n\n// Calculate discount (10% example)\nlet discount = 0;\nif (order.customerId && totalPrice > 0) {\n  discount = totalPrice * 0.1; // 10% discount\n}\n\nconst finalTotal = totalPrice - discount;\n\n// Calculate estimated prep time\nconst estimatedTime = validatedItems.reduce((time, item) => {\n  return time + (item.prepTime * item.quantity);\n}, 0);\n\n// Generate order ID\nconst orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();\n\n// Return processed order\nreturn [{\n  json: {\n    orderId: orderId,\n    customerId: order.customerId || 'guest',\n    restaurantId: order.restaurantId,\n    locationId: order.locationId || 'default-location',\n    items: validatedItems,\n    subtotal: totalPrice,\n    discount: discount,\n    total: finalTotal,\n    estimatedTime: estimatedTime,\n    status: 'confirmed',\n    createdAt: new Date().toISOString(),\n    // Square API format\n    squareLineItems: validatedItems.map(item => ({\n      name: item.name,\n      quantity: item.quantity.toString(),\n      base_price_money: {\n        amount: Math.round(item.price * 100), // Convert to cents\n        currency: 'USD'\n      }\n    }))\n  }\n}];"
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "name": "Process Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.squareup.com/v2/orders",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "squareApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Square-Version",
+              "value": "2023-10-18"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"order\": {\n    \"location_id\": $json.locationId,\n    \"line_items\": $json.squareLineItems,\n    \"discounts\": $json.discount > 0 ? [{\n      \"name\": \"AI Processing Discount\",\n      \"amount_money\": {\n        \"amount\": Math.round($json.discount * 100),\n        \"currency\": \"USD\"\n      }\n    }] : []\n  }\n} }}",
+        "options": {}
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "Create Square Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "orders",
+        "columns": "order_id,customer_id,restaurant_id,items,subtotal,discount,total,estimated_time,status,created_at",
+        "additionalFields": {
+          "mode": "values"
+        },
+        "values": "={{ $('Process Order').item.json.orderId }},={{ $('Process Order').item.json.customerId }},={{ $('Process Order').item.json.restaurantId }},={{ JSON.stringify($('Process Order').item.json.items) }},={{ $('Process Order').item.json.subtotal }},={{ $('Process Order').item.json.discount }},={{ $('Process Order').item.json.total }},={{ $('Process Order').item.json.estimatedTime }},={{ $('Process Order').item.json.status }},={{ $('Process Order').item.json.createdAt }}"
+      },
+      "id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+      "name": "Save Order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $('Process Order').item.json.total }}",
+        "rules": {
+          "rules": [
+            {
+              "operation": "largerEqual",
+              "value2": "50",
+              "output": 0
+            }
+          ]
+        }
+      },
+      "id": "e5f6g7h8-i9j0-1234-efgh-567890123456",
+      "name": "High Value Order Filter",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://kitchen-service:8000/priority-order",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"orderId\": $('Process Order').item.json.orderId,\n  \"items\": $('Process Order').item.json.items,\n  \"estimatedTime\": $('Process Order').item.json.estimatedTime,\n  \"priority\": \"high\",\n  \"total\": $('Process Order').item.json.total\n} }}",
+        "options": {}
+      },
+      "id": "f6g7h8i9-j0k1-2345-fghi-678901234567",
+      "name": "Notify Kitchen - Priority",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://notification-service:8000/order-confirmation",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"customerId\": $('Process Order').item.json.customerId,\n  \"orderId\": $('Process Order').item.json.orderId,\n  \"total\": $('Process Order').item.json.total,\n  \"estimatedTime\": $('Process Order').item.json.estimatedTime,\n  \"items\": $('Process Order').item.json.items,\n  \"squareOrderId\": $json.order ? $json.order.id : null\n} }}",
+        "options": {}
+      },
+      "id": "g7h8i9j0-k1l2-3456-ghij-789012345678",
+      "name": "Send Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1250,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Order Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Order": {
+      "main": [
+        [
+          {
+            "node": "Create Square Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Square Order": {
+      "main": [
+        [
+          {
+            "node": "Save Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Order": {
+      "main": [
+        [
+          {
+            "node": "High Value Order Filter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Value Order Filter": {
+      "main": [
+        [
+          {
+            "node": "Notify Kitchen - Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": {},
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

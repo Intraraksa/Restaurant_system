@@ -1,0 +1,241 @@
+{
+  "name": "Review Response Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reviews/new",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "review-webhook",
+      "name": "Review Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://langchain-service:8000/analyze-sentiment",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"review\": $json.reviewText,\n  \"rating\": $json.rating,\n  \"platform\": $json.platform\n} }}",
+        "options": {}
+      },
+      "id": "sentiment-analysis",
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.sentiment }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "positive",
+              "output": 0
+            },
+            {
+              "value2": "neutral",
+              "output": 1
+            },
+            {
+              "value2": "negative",
+              "output": 2
+            }
+          ]
+        }
+      },
+      "id": "sentiment-router",
+      "name": "Sentiment Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://langchain-service:8000/generate-response",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"review\": $('Review Webhook').item.json.reviewText,\n  \"sentiment\": $json.sentiment,\n  \"restaurantInfo\": {\n    \"name\": $('Review Webhook').item.json.restaurantName,\n    \"responseStyle\": $('Review Webhook').item.json.responseStyle || \"professional\",\n    \"keyPoints\": $('Review Webhook').item.json.keyPoints || []\n  },\n  \"template\": $json.sentiment + \"_response\"\n} }}",
+        "options": {}
+      },
+      "id": "generate-response",
+      "name": "Generate Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "review_responses",
+        "columns": "review_id,response,sentiment,status,created_at,platform,rating,original_review",
+        "additionalFields": {
+          "mode": "values"
+        },
+        "values": "={{ $('Review Webhook').item.json.reviewId }},{{ JSON.stringify($json.generatedResponse) }},{{ $('Sentiment Analysis').item.json.sentiment }},pending_approval,{{ $now }},{{ $('Review Webhook').item.json.platform }},{{ $('Review Webhook').item.json.rating }},{{ JSON.stringify($('Review Webhook').item.json.reviewText) }}"
+      },
+      "id": "save-response",
+      "name": "Save Response",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $('Sentiment Analysis').item.json.sentiment }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "negative",
+              "output": 0
+            }
+          ]
+        }
+      },
+      "id": "negative-review-filter",
+      "name": "Negative Review Filter",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "to": "manager@restaurant.com",
+        "subject": "Urgent: Negative Review Alert",
+        "emailType": "html",
+        "message": "=<div>\n  <h3>Negative Review Alert</h3>\n  <p><strong>Platform:</strong> {{ $('Review Webhook').item.json.platform }}</p>\n  <p><strong>Rating:</strong> {{ $('Review Webhook').item.json.rating }}/5</p>\n  <p><strong>Review:</strong></p>\n  <blockquote>{{ $('Review Webhook').item.json.reviewText }}</blockquote>\n  <p><strong>Generated Response:</strong></p>\n  <blockquote>{{ $('Generate Response').item.json.generatedResponse }}</blockquote>\n  <p>Please review and approve the response before posting.</p>\n</div>",
+        "options": {}
+      },
+      "id": "alert-manager",
+      "name": "Alert Manager",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": true,\n  \"reviewId\": $('Review Webhook').item.json.reviewId,\n  \"sentiment\": $('Sentiment Analysis').item.json.sentiment,\n  \"generatedResponse\": $('Generate Response').item.json.generatedResponse,\n  \"status\": \"pending_approval\",\n  \"needsManagerReview\": $('Sentiment Analysis').item.json.sentiment === \"negative\"\n} }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 400]
+    }
+  ],
+  "connections": {
+    "Review Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Router": {
+      "main": [
+        [
+          {
+            "node": "Generate Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Response": {
+      "main": [
+        [
+          {
+            "node": "Save Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Response": {
+      "main": [
+        [
+          {
+            "node": "Negative Review Filter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Negative Review Filter": {
+      "main": [
+        [
+          {
+            "node": "Alert Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

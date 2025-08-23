@@ -1,0 +1,39 @@
+graph TB
+    subgraph "Customer Touchpoints"
+        WEB[Website Widget]
+        FB[Facebook Messenger]
+        IG[Instagram DMs]
+        SMS[SMS/WhatsApp]
+        VOICE[Voice Calls]
+        EMAIL[Email]
+    end
+    
+    subgraph "Core AI System"
+        N8N[n8n Orchestrator]
+        LC[LangChain Service]
+        DB[(PostgreSQL)]
+        REDIS[(Redis Cache)]
+    end
+    
+    subgraph "Restaurant Systems"
+        POS[Square POS]
+        RES[Reservation System]
+        QB[QuickBooks]
+        MENU[Menu Database]
+    end
+    
+    WEB --> N8N
+    FB --> N8N
+    IG --> N8N
+    SMS --> N8N
+    VOICE --> N8N
+    EMAIL --> N8N
+    
+    N8N <--> LC
+    N8N <--> DB
+    LC <--> REDIS
+    
+    N8N <--> POS
+    N8N <--> RES
+    N8N <--> QB
+    N8N <--> MENU

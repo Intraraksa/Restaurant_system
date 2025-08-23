@@ -1,0 +1,194 @@
+{
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "name": "AI Reservation Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Check New Requests",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM reservation_requests WHERE status = 'pending' ORDER BY created_at ASC LIMIT 50"
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "name": "Get Pending Reservations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each reservation request\nconst items = $input.all();\nconst processed = [];\n\nfor (const item of items) {\n  const reservation = item.json;\n  \n  try {\n    // Simple availability check simulation\n    // In real scenario, this would call your reservation API\n    const isAvailable = Math.random() > 0.3; // 70% availability rate\n    \n    if (isAvailable) {\n      processed.push({\n        json: {\n          ...reservation,\n          status: 'confirmed',\n          action: 'confirm',\n          confirmation_code: 'RES' + Math.random().toString(36).substr(2, 8).toUpperCase()\n        }\n      });\n    } else {\n      // Simulate alternative suggestions\n      const alternatives = [\n        { date: reservation.date, time: '19:00', available: true },\n        { date: reservation.date, time: '20:30', available: true }\n      ];\n      \n      processed.push({\n        json: {\n          ...reservation,\n          status: 'alternatives_offered',\n          action: 'suggest',\n          alternatives: alternatives\n        }\n      });\n    }\n  } catch (error) {\n    processed.push({\n      json: {\n        ...reservation,\n        status: 'error',\n        action: 'retry',\n        error_message: error.message\n      }\n    });\n  }\n}\n\nreturn processed;"
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "Process Reservations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "confirm",
+              "output": 0
+            },
+            {
+              "value2": "suggest",
+              "output": 1
+            },
+            {
+              "value2": "retry",
+              "output": 2
+            }
+          ]
+        }
+      },
+      "id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+      "name": "Action Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE reservation_requests SET status = '{{ $json.status }}', confirmation_code = '{{ $json.confirmation_code }}', updated_at = NOW() WHERE id = {{ $json.id }}"
+      },
+      "id": "e5f6g7h8-i9j0-1234-efgh-567890123456",
+      "name": "Update Confirmed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE reservation_requests SET status = '{{ $json.status }}', alternatives = '{{ $json.alternatives | json }}', updated_at = NOW() WHERE id = {{ $json.id }}"
+      },
+      "id": "f6g7h8i9-j0k1-2345-fghi-678901234567",
+      "name": "Update Alternatives",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE reservation_requests SET status = '{{ $json.status }}', error_message = '{{ $json.error_message }}', updated_at = NOW() WHERE id = {{ $json.id }}"
+      },
+      "id": "g7h8i9j0-k1l2-3456-ghij-789012345678",
+      "name": "Update Errors",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Check New Requests": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Reservations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Reservations": {
+      "main": [
+        [
+          {
+            "node": "Process Reservations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Reservations": {
+      "main": [
+        [
+          {
+            "node": "Action Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Router": {
+      "main": [
+        [
+          {
+            "node": "Update Confirmed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Alternatives",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": {},
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

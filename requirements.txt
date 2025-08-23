@@ -1,0 +1,11 @@
+langchain-google-genai==2.1.8
+langchain-openai
+langchain==0.3.26
+langchain-community==0.3.26
+python-dotenv==1.0.1
+langgraph==0.6.2
+langchain-chroma>=0.1.2
+pypdf==5.9.0
+fastapi
+uvicorn
+squareup==43.0.2.20250820
