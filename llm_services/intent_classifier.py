@@ -1,9 +1,9 @@
 # intent_classifier.py
 from langchain.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import List, Literal,Dict,Any
 import json
 
 class IntentClassification(BaseModel):
@@ -29,7 +29,7 @@ class IntentClassification(BaseModel):
 
 class RestaurantIntentClassifier:
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+        self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
         self.parser = PydanticOutputParser(pydantic_object=IntentClassification)
         self.prompt = PromptTemplate(
             template="""Classify the following restaurant customer message.

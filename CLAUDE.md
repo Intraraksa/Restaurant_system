@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-This is a Restaurant AI Service that provides intelligent customer service automation for restaurants using LangChain and FastAPI. The system handles reservations, orders, menu inquiries, and review responses through various messaging channels.
+This is a Restaurant AI Service that provides intelligent customer service automation for restaurants using LangChain with Google Gemini and FastAPI. The system handles reservations, orders, menu inquiries, and review responses through various messaging channels.
 
 ## Architecture
 - **FastAPI application** (`main.py`) - Main API server with endpoints for message processing
@@ -15,7 +15,8 @@ This is a Restaurant AI Service that provides intelligent customer service autom
 - **N8N workflows** (`n8n_workflow/`) - Pre-built automation workflows for different restaurant operations
 
 ## Key Technologies
-- **LangChain** - AI agent framework with OpenAI GPT-4
+- **LangChain** - AI agent framework with Google Gemini
+- **Google Gemini** - AI models (gemini-2.5-flash for all components)
 - **FastAPI** - API framework with async support
 - **PostgreSQL** - Primary database with UUID primary keys
 - **Redis** - Caching layer for responses
@@ -39,7 +40,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ### Required Environment Variables
 - `REDIS_URL` - Redis connection string
 - `DATABASE_URL` - PostgreSQL connection string  
-- `OPENAI_API_KEY` - OpenAI API key (set by LangChain)
+- `GOOGLE_API_KEY` - Google Gemini API key
 
 ## Database Setup
 The database schema is defined in `knowledge/db.md`. Key tables:

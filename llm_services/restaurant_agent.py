@@ -1,9 +1,9 @@
 # restaurant_agent.py
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.tools import Tool
 from typing import Dict, List, Any
 import json
@@ -12,10 +12,10 @@ from datetime import datetime, timedelta
 class RestaurantAIAgent:
     def __init__(self, restaurant_config: Dict[str, Any]):
         self.restaurant_config = restaurant_config
-        self.llm = ChatOpenAI(
-            model="gpt-4-turbo-preview",
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
             temperature=0.7,
-            max_tokens=500
+            max_output_tokens=500
         )
         self.memory = ConversationBufferWindowMemory(
             k=10,
@@ -91,7 +91,7 @@ class RestaurantAIAgent:
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         
-        agent = create_openai_functions_agent(
+        agent = create_tool_calling_agent(
             llm=self.llm,
             tools=self.tools,
             prompt=prompt

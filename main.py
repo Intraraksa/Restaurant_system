@@ -10,6 +10,10 @@ import asyncpg
 from datetime import datetime
 import json
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import our custom modules
 from llm_services.restaurant_agent import RestaurantAIAgent
@@ -132,11 +136,89 @@ async def generate_response(request: ResponseRequest):
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
+    """Comprehensive health check endpoint"""
+    health_status = {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": {
+            "redis": {"status": "unknown", "details": ""},
+            "database": {"status": "unknown", "details": ""},
+            "llm": {"status": "unknown", "details": ""}
+        }
     }
+    
+    overall_healthy = True
+    
+    # Test Redis connection
+    try:
+        redis_start = datetime.utcnow()
+        await app.state.redis.ping()
+        redis_end = datetime.utcnow()
+        response_time = (redis_end - redis_start).total_seconds() * 1000
+        
+        health_status["services"]["redis"] = {
+            "status": "healthy",
+            "details": f"Connected successfully",
+            "response_time_ms": round(response_time, 2)
+        }
+    except Exception as e:
+        overall_healthy = False
+        health_status["services"]["redis"] = {
+            "status": "unhealthy",
+            "details": f"Connection failed: {str(e)}"
+        }
+    
+    # Test Database connection
+    try:
+        db_start = datetime.utcnow()
+        async with app.state.db.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+        db_end = datetime.utcnow()
+        response_time = (db_end - db_start).total_seconds() * 1000
+        
+        health_status["services"]["database"] = {
+            "status": "healthy",
+            "details": "Connected successfully",
+            "response_time_ms": round(response_time, 2)
+        }
+    except Exception as e:
+        overall_healthy = False
+        health_status["services"]["database"] = {
+            "status": "unhealthy",
+            "details": f"Connection failed: {str(e)}"
+        }
+    
+    # Test LLM connection
+    try:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        
+        llm_start = datetime.utcnow()
+        test_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0
+        )
+        response = test_llm.predict("Hello")
+        llm_end = datetime.utcnow()
+        response_time = (llm_end - llm_start).total_seconds() * 1000
+        
+        health_status["services"]["llm"] = {
+            "status": "healthy",
+            "details": "API call successful",
+            "response_time_ms": round(response_time, 2),
+            "model": "gemini-2.5-flash"
+        }
+    except Exception as e:
+        overall_healthy = False
+        health_status["services"]["llm"] = {
+            "status": "unhealthy",
+            "details": f"API call failed: {str(e)}",
+            "model": "gemini-2.5-flash"
+        }
+    
+    # Set overall status
+    health_status["status"] = "healthy" if overall_healthy else "unhealthy"
+    
+    return health_status
 
 async def log_conversation(
     db_pool,
@@ -162,4 +244,4 @@ async def log_conversation(
         ]))
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="localhost", port=8000)

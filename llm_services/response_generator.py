@@ -1,6 +1,6 @@
 # response_generator.py
 from langchain.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import BaseOutputParser
 from typing import Dict, Any, Optional
 import json
@@ -8,8 +8,8 @@ import json
 class RestaurantResponseGenerator:
     def __init__(self, restaurant_config: Dict[str, Any]):
         self.restaurant_config = restaurant_config
-        self.llm = ChatOpenAI(
-            model="gpt-4-turbo-preview",
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
             temperature=0.7
         )
         self.templates = self._load_templates()
